@@ -60,7 +60,7 @@
     "@nestjs/swagger": "^7.3.0",
     "@nestjs/throttler": "^6.3.0",
     "@neynar/nodejs-sdk": "^2.8.1",
-    "@neynar/react": "^0.9.7",
+    "@neynar/react": "^1.2.0",
     "@nx/eslint": "19.7.2",
     "@nx/eslint-plugin": "19.7.2",
     "@nx/jest": "19.7.2",
