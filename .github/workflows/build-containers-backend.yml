@@ -1,0 +1,81 @@
+---
+name: "Build Backend Containers"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-containers:
+    strategy:
+      matrix:
+        include:
+          - runnertags: ubuntu-latest
+            arch: amd64
+          - runnertags: ubuntu-latest
+            arch: arm64
+
+    runs-on: ${{ matrix.runnertags }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU (For ARM64 Builds)
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and Push Image
+        run: |
+          docker buildx build --platform linux/${{ matrix.arch }} \
+            -f Dockerfile.backend \
+            -t ghcr.io/${{ github.repository_owner }}/postiz-backend:latest-${{ matrix.arch }} \
+            --provenance=false --sbom=false \
+            --output "type=registry" .
+
+  build-container-manifest:
+    needs: build-containers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Create Docker Manifest
+        run: |
+          # Verify the architecture images
+          echo "Verifying AMD64 image (latest tag):"
+          docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/postiz-backend:latest-amd64
+          
+          echo "Verifying ARM64 image (latest tag):"
+          docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/postiz-backend:latest-arm64
+          
+          # Remove any existing manifests (optional)
+          docker manifest rm ghcr.io/${{ github.repository_owner }}/postiz-backend:latest || true
+          
+          # Create and push the 'latest' manifest
+          docker manifest create ghcr.io/${{ github.repository_owner }}/postiz-backend:latest \
+            --amend ghcr.io/${{ github.repository_owner }}/postiz-backend:latest-amd64 \
+            --amend ghcr.io/${{ github.repository_owner }}/postiz-backend:latest-arm64
+
+          docker manifest push ghcr.io/${{ github.repository_owner }}/postiz-backend:latest
+
+      - name: Verify Manifest
+        run: |
+          docker manifest inspect ghcr.io/${{ github.repository_owner }}/postiz-backend:latest
